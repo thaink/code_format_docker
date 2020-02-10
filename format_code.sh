@@ -5,29 +5,25 @@
 
 set -e
 set -o pipefail
+trap 'kill $$' ERR
 
 cd $1
 
-if [ $(git diff --name-only | wc -l) -ne 0 ]; then
-  echo "Please stage or stash unstaged changes first."
-  exit 1
-fi
-
 ls_staged_files () {
   # Don't throw errors if egrep find no match.
-  echo $(git diff --name-only --cached --diff-filter=d | egrep $1 || true)
+  echo $(git ls-files | egrep $1 || true)
 }
 
 # Formatting cpp files using clang-format.
 cpp_files=$(ls_staged_files "\.h|\.cc|\.cpp")
 if [ "$cpp_files" ]; then
-  clang-format -i --verbose -style=google $cpp_files
+  clang-format -i -style=google $cpp_files
 fi
 
 # Formatting build files using buildifier.
 build_files=$(ls_staged_files "WORKSPACE|*BUILD|*BUILD.bazel|*\.bzl")
 if [ "$build_files" ]; then
-  buildifier -v $build_files
+  buildifier $build_files
 fi
 
 # Formatting Java files.
@@ -36,3 +32,11 @@ if [ "$java_files" ]; then
   java -jar /app/google-java-format-1.7-all-deps.jar --replace  $java_files
 fi
 
+
+if [ $(git diff --name-only | wc -l) -ne 0 ]; then
+  echo "Following files are not properly formatted, please undo your commit" \
+       "and run format_code.sh."
+  echo "Files: "
+  git diff --name-only
+  exit 1
+fi
